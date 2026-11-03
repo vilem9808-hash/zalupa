@@ -13,6 +13,7 @@ from hud import HUD
 from impact import draw_impacts
 from menu import Menu, NAMES
 import settings as preferences
+from music import Music
 
 ROOT = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent))
 W, H, GROUND = 1152, 648, 523
@@ -118,6 +119,7 @@ class Game:
         self.ai_tick = 0
         self.round = 1
         self.reset()
+        self.music = Music(ROOT/'assets/audio/bloody_stream.mp3',self.preferences['music_volume'])
         self.menu = Menu(self)
         if self.preferences['fullscreen']:
             self.set_fullscreen(True,save=False)
@@ -451,6 +453,11 @@ class Game:
         role='ИИ' if f.id==2 and self.mode_ai else 'P'+str(f.id)
         return role+' — '+NAMES[f.hero]
 
+    def set_music_volume(self,value,save=True):
+        self.preferences['music_volume']=round(clamp(value,0,100))
+        self.music.set_volume(self.preferences['music_volume'])
+        if save:self.save_preferences()
+
     def save_preferences(self):
         try:
             preferences.save(self.settings_path,self.preferences)
@@ -489,6 +496,7 @@ class Game:
         if event.type==pg.KEYDOWN and event.key==pg.K_F11 and not getattr(event,'repeat',False):
             self.set_fullscreen(not self.preferences['fullscreen']);return
         if event.type==pg.WINDOWFOCUSLOST:
+            self.menu.finish_drag()
             self.keys.clear();self.pressed.clear()
             if self.scene=='battle':self.open_pause()
             return
@@ -524,6 +532,8 @@ class Game:
             self.render();frames+=1
             if max_frames and frames>=max_frames:self.running=False
         if screenshot:pg.image.save(self.screen,str(screenshot))
+        self.menu.finish_drag()
+        self.music.stop()
         pg.quit()
 
 

@@ -17,6 +17,7 @@ class Menu:
         self.stage=0
         self.choice=['wolf','rabbit']
         self.hover=None
+        self.dragging=False
         self.message=''
         self.background=self.make_background()
         self.heroes={}
@@ -73,9 +74,10 @@ class Menu:
                     ('back',pg.Rect(65,655,230,61),'НАЗАД'),
                     ('confirm',pg.Rect(735,655,350,61),'НАЧАТЬ БОЙ' if self.stage else 'ПОДТВЕРДИТЬ')]
         if scene=='settings':
-            return [('fullscreen',pg.Rect(190,275,772,88),'ПОЛНЫЙ ЭКРАН: '+('ВКЛ' if g.preferences['fullscreen'] else 'ВЫКЛ')),
-                    ('shake',pg.Rect(190,391,772,88),'ТРЯСКА КАМЕРЫ: '+('ВКЛ' if g.preferences['camera_shake'] else 'ВЫКЛ')),
-                    ('back',pg.Rect(380,593,390,70),'НАЗАД')]
+            return [('fullscreen',pg.Rect(190,235,772,72),'ПОЛНЫЙ ЭКРАН: '+('ВКЛ' if g.preferences['fullscreen'] else 'ВЫКЛ')),
+                    ('shake',pg.Rect(190,332,772,72),'ТРЯСКА КАМЕРЫ: '+('ВКЛ' if g.preferences['camera_shake'] else 'ВЫКЛ')),
+                    ('volume',pg.Rect(190,431,772,119),'ГРОМКОСТЬ МУЗЫКИ'),
+                    ('back',pg.Rect(380,634,390,66),'НАЗАД')]
         if scene=='pause':
             return [('resume',pg.Rect(370,285,430,78),'ПРОДОЛЖИТЬ'),('settings',pg.Rect(350,390,430,78),'НАСТРОЙКИ'),('main',pg.Rect(330,495,430,78),'ГЛАВНОЕ МЕНЮ')]
         return []
@@ -119,19 +121,46 @@ class Menu:
             self.text(surface,'Можно выбрать одинаковых героев',(576,617),17,'#d5bfe4',False,True)
         elif scene=='settings':
             self.text(surface,'НАСТРОЙКИ',(576,133),53,YELLOW,True,True)
-            self.text(surface,'Тряска камеры отключена по умолчанию',(576,219),20,TEAL,False,True)
-            self.text(surface,'F11 — переключить экран в любой момент',(576,526),19,'white',False,True)
-            if self.message:self.text(surface,self.message,(576,565),17,PINK,False,True)
+            self.text(surface,'Тряска камеры отключена по умолчанию',(576,200),18,TEAL,False,True)
+            self.text(surface,'F11 — переключить экран в любой момент',(576,583),18,'white',False,True)
+            if not self.game.music.available:self.text(surface,'Аудиоустройство недоступно — игра продолжится без музыки',(576,611),15,PINK,False,True)
+            elif self.message:self.text(surface,self.message,(576,611),16,PINK,False,True)
         elif scene=='pause':
             self.text(surface,'ПАУЗА',(576,163),64,YELLOW,True,True)
         for i,(action,rect,label) in enumerate(self.buttons(scene)):
             if scene=='select' and action in HEROES:continue
             focused=self.hover==action or (self.hover is None and i==self.focus)
             self.panel(surface,rect,YELLOW,focused)
-            self.text(surface,label,rect.center,21 if len(label)>22 else 24,INK if focused else 'white',True,True)
+            if action=='volume':
+                value=self.game.preferences['music_volume']
+                color=INK if focused else 'white'
+                self.text(surface,f'ГРОМКОСТЬ МУЗЫКИ: {value}%',(576,459),22,color,True,True)
+                track=self.volume_track()
+                pg.draw.rect(surface,'#594064',track,border_radius=4)
+                width=round(track.width*value/100)
+                if width:pg.draw.rect(surface,TEAL,(track.x,track.y,width,track.height),border_radius=4)
+                pg.draw.circle(surface,INK,(track.x+width,track.centery),13)
+                pg.draw.circle(surface,TEAL,(track.x+width,track.centery),10)
+                self.text(surface,'0%',(track.x-39,track.y-8),16,color)
+                self.text(surface,'100%',(track.right+13,track.y-8),16,color)
+                self.text(surface,'Перетяните ползунок или используйте ← / →',(576,530),15,color,False,True)
+            else:self.text(surface,label,rect.center,21 if len(label)>22 else 24,INK if focused else 'white',True,True)
         self.text(surface,'МЫШЬ / ← → ↑ ↓ / ENTER — выбор     ESC — назад',(576,741),15,'#ddd0e9',False,True)
 
+    def volume_track(self):
+        return pg.Rect(268,494,616,9)
+
+    def drag_volume(self,point):
+        track=self.volume_track()
+        self.game.set_music_volume(100*(point[0]-track.x)/track.width,save=False)
+
+    def finish_drag(self):
+        if self.dragging:
+            self.dragging=False
+            self.game.save_preferences()
+
     def activate(self,action):
+        self.finish_drag()
         g=self.game
         previous_scene=g.scene
         if action in ('ai','pvp'):
@@ -158,13 +187,24 @@ class Menu:
         elif action=='main':g.scene='main';g.paused=False;g.keys.clear();g.pressed.clear()
         elif action=='quit':g.running=False
         if g.scene!=previous_scene:self.focus=0
-        elif action in ('fullscreen','shake'):
+        elif action in ('fullscreen','shake','volume'):
             self.focus=next(i for i,(a,_,_) in enumerate(self.buttons(g.scene)) if a==action)
         self.hover=None
 
     def event(self,event,point=None):
         scene=self.game.scene
         buttons=self.buttons(scene)
+        if event.type==pg.MOUSEBUTTONUP and getattr(event,'button',None)==1:
+            self.finish_drag();return
+        if scene=='settings':
+            if event.type==pg.MOUSEMOTION and self.dragging and point is not None:
+                self.drag_volume(point);return
+            if event.type==pg.MOUSEBUTTONDOWN and event.button==1 and point is not None and self.volume_track().inflate(40,40).collidepoint(point):
+                self.focus=2;self.hover='volume';self.dragging=True;self.drag_volume(point);return
+            if event.type==pg.KEYDOWN and self.focus==2 and event.key in (pg.K_LEFT,pg.K_RIGHT,pg.K_HOME,pg.K_END):
+                v=self.game.preferences['music_volume']
+                v=0 if event.key==pg.K_HOME else 100 if event.key==pg.K_END else v+(-5 if event.key==pg.K_LEFT else 5)
+                self.game.set_music_volume(v);return
         if event.type==pg.MOUSEMOTION and point is not None:
             self.hover=next((a for a,r,t in buttons if r.collidepoint(point)),None)
         if event.type==pg.MOUSEBUTTONDOWN and event.button==1 and point is not None:

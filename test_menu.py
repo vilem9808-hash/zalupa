@@ -121,6 +121,47 @@ class MenuTests(unittest.TestCase):
         self.assertFalse(g.preferences['camera_shake'])
         self.assertFalse(g.preferences['fullscreen'])
 
+    def test_music_slider_drag_applies_and_saves(self):
+        g=self.g;g.menu.activate('settings');g.render()
+        track=g.menu.volume_track()
+        def pos(x,y):return (g.viewport.x+x*g.viewport.width/1152,g.viewport.y+y*g.viewport.height/760)
+        g.handle_event(pg.event.Event(pg.MOUSEBUTTONDOWN,button=1,pos=pos(track.x+track.width*.75,track.centery)))
+        self.assertEqual(g.preferences['music_volume'],75)
+        self.assertTrue(g.menu.dragging)
+        g.handle_event(pg.event.Event(pg.MOUSEMOTION,pos=pos(track.right+90,track.centery),rel=(90,0),buttons=(1,0,0)))
+        self.assertEqual(g.preferences['music_volume'],100)
+        g.handle_event(pg.event.Event(pg.MOUSEBUTTONUP,button=1,pos=pos(track.right+90,track.centery)))
+        self.assertFalse(g.menu.dragging)
+        self.assertEqual(settings.load(self.path)['music_volume'],100)
+        self.assertAlmostEqual(pg.mixer.music.get_volume(),1,delta=.01)
+
+    def test_music_volume_keyboard_mute_and_persistence(self):
+        g=self.g;g.menu.activate('settings');g.menu.focus=2
+        self.key(pg.K_HOME)
+        self.assertEqual(g.preferences['music_volume'],0)
+        self.assertEqual(pg.mixer.music.get_volume(),0)
+        self.key(pg.K_END);self.key(pg.K_LEFT)
+        self.assertEqual(g.preferences['music_volume'],95)
+        self.assertEqual(settings.load(self.path)['music_volume'],95)
+        self.assertEqual(g.menu.focus,2)
+
+    def test_volume_migrates_old_settings_and_rejects_invalid_numbers(self):
+        self.path.write_text('{"fullscreen":true,"camera_shake":false}')
+        self.assertEqual(settings.load(self.path)['music_volume'],35)
+        self.assertEqual(settings.normalize({'music_volume':400})['music_volume'],100)
+        self.assertEqual(settings.normalize({'music_volume':-1})['music_volume'],0)
+        for value in (True,'loud',float('nan'),float('inf')):
+            self.assertEqual(settings.normalize({'music_volume':value})['music_volume'],35)
+
+    def test_music_continues_across_menu_selection_and_battle(self):
+        g=self.g
+        self.assertTrue(g.music.available)
+        self.assertTrue(pg.mixer.music.get_busy())
+        g.menu.activate('ai');g.menu.activate('confirm');g.menu.activate('confirm')
+        self.assertTrue(pg.mixer.music.get_busy())
+        g.open_pause();g.menu.activate('settings')
+        self.assertTrue(pg.mixer.music.get_busy())
+
     def test_corrupt_preferences_fall_back(self):
         self.path.write_text('[]')
         self.assertEqual(settings.load(self.path),settings.DEFAULTS)
