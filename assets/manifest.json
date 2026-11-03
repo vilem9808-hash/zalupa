@@ -24,5 +24,11 @@
     "special": 3,
     "hit": 3,
     "death": 3
-  }
+  },
+  "heroes": [
+    "wolf",
+    "rabbit",
+    "matroskin",
+    "pechkin"
+  ]
 }

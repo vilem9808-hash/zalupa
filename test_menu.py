@@ -7,6 +7,7 @@ import unittest
 import pygame as pg
 from main import Game
 from menu import HEROES
+from roster import HERO_DATA
 import settings
 
 
@@ -107,7 +108,7 @@ class MenuTests(unittest.TestCase):
             for index in (0,8,16):
                 image,offset=self.g.motion[hero]['run'][index]
                 box=image.get_bounding_rect(min_alpha=128)
-                y=box.top+int(box.height*(.48 if hero=='wolf' else .65))
+                y=box.top+int(box.height*HERO_DATA[hero]['hip'])
                 xs=[x for x in range(box.left,box.right) if image.get_at((x,y)).a>128]
                 roots.append(xs[len(xs)//2]+offset[0])
             self.assertLess(max(roots)-min(roots),20)
@@ -173,7 +174,7 @@ class MenuTests(unittest.TestCase):
             for i,image in enumerate(keys):
                 self.assertIs(image,frames[i*3][0])
                 box=image.get_bounding_rect(min_alpha=128)
-                y=box.top+int(box.height*(.48 if hero=='wolf' else .65))
+                y=box.top+int(box.height*HERO_DATA[hero]['hip'])
                 xs=[x for x in range(box.left,box.right) if image.get_at((x,y)).a>128]
                 roots.append(xs[len(xs)//2]+frames[i*3][1][0])
             self.assertLess(max(roots)-min(roots),25)
@@ -186,8 +187,8 @@ class MenuTests(unittest.TestCase):
             point=(g.viewport.x+rect.centerx*g.viewport.width/1152,g.viewport.y+rect.centery*g.viewport.height/760)
             g.handle_event(pg.event.Event(pg.MOUSEBUTTONDOWN,button=1,pos=point))
         click(1);self.assertEqual(HEROES[g.menu.cursor],'rabbit')
-        click(3);self.assertEqual(g.menu.stage,1)
-        click(0);click(3)
+        click(len(HEROES)+1);self.assertEqual(g.menu.stage,1)
+        click(0);click(len(HEROES)+1)
         self.assertEqual((g.scene,g.p1.hero,g.p2.hero),('battle','rabbit','wolf'))
         for image in g.menu.roster_portraits.values():
             self.assertLessEqual(image.get_width(),144)
@@ -205,6 +206,64 @@ class MenuTests(unittest.TestCase):
         self.assertLess(g.camera.scale[1],.8)
         _,head=g.camera.project(330,523-367)
         self.assertLess(ground-head,300)
+
+    def test_new_heroes_selected_with_two_dimensional_keyboard_grid(self):
+        g=self.g;g.menu.activate('ai')
+        self.key(pg.K_DOWN);self.assertEqual(HEROES[g.menu.cursor],'matroskin')
+        self.key(pg.K_RETURN);self.key(pg.K_DOWN)
+        self.assertEqual(HEROES[g.menu.cursor],'pechkin')
+        self.key(pg.K_RETURN)
+        self.assertEqual((g.p1.hero,g.p2.hero),('matroskin','pechkin'))
+        self.assertTrue(g.mode_ai)
+        g.phase='fight';g.ai(.2)
+        self.assertLess(g.p2.vx,0)
+        g.render()
+
+    def test_new_hero_mirror_matches_render_correct_native_direction(self):
+        g=self.g
+        for hero in ('matroskin','pechkin'):
+            g.menu.activate('pvp');g.menu.activate(hero);g.menu.activate('confirm')
+            g.menu.activate(hero);g.menu.activate('confirm')
+            self.assertEqual((g.p1.hero,g.p2.hero),(hero,hero))
+            g.render()
+            self.assertTrue(any(key[0]==hero for key in g.motion_flips))
+
+    def test_new_heroes_have_complete_animations_and_contacts(self):
+        from animation import ACTIONS
+        g=self.g
+        for hero in ('matroskin','pechkin'):
+            self.assertEqual(set(g.motion[hero]),set(ACTIONS))
+            for action,frames in g.motion[hero].items():
+                self.assertEqual(len(frames),24)
+                self.assertEqual(len(g.sprites[hero][action][0]),8 if action=='walk' else 3)
+                for image,_ in frames:self.assertGreater(image.get_bounding_rect(min_alpha=128).height,30)
+            for action in ('light','heavy','special'):
+                self.assertTrue(-400<g.contact_points[(hero,action)]<-70)
+            g.selected_heroes=[hero,'wolf'];g.new_match();g.mode_ai=False;g.scene='battle';g.phase='fight'
+            g.p1.x=500;g.p2.x=740
+            g.start_attack(g.p1,'heavy')
+            for _ in range(42):g.step(1/120)
+            self.assertEqual(g.p2.hp,84)
+            g.render()
+
+    def test_four_distinct_portraits_and_names(self):
+        from roster import NAMES
+        g=self.g
+        self.assertEqual(len(HEROES),4)
+        self.assertEqual(set(g.hud.portraits),set(HEROES))
+        self.assertEqual(NAMES['matroskin'],'МАТРОСКИН')
+        self.assertEqual(NAMES['pechkin'],'ПЕЧКИН')
+        self.assertEqual(len({pg.image.tobytes(image,'RGBA') for image in g.hud.portraits.values()}),4)
+
+    def test_mouse_can_select_bottom_row_new_heroes(self):
+        g=self.g;g.menu.activate('ai');g.render()
+        def click(index):
+            rect=g.menu.buttons('select')[index][1]
+            point=(g.viewport.x+rect.centerx*g.viewport.width/1152,g.viewport.y+rect.centery*g.viewport.height/760)
+            g.handle_event(pg.event.Event(pg.MOUSEBUTTONDOWN,button=1,pos=point))
+        click(3);click(len(HEROES)+1);click(2);click(len(HEROES)+1)
+        self.assertEqual((g.scene,g.p1.hero,g.p2.hero),('battle','pechkin','matroskin'))
+        g.render()
 
     def test_corrupt_preferences_fall_back(self):
         self.path.write_text('[]')

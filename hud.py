@@ -3,6 +3,7 @@ import math
 from pathlib import Path
 import pygame as pg
 import pygame.gfxdraw as gfx
+from roster import HEROES, NAMES, HERO_DATA
 
 DARK = '#10101e'
 GOLD = '#d49a46'
@@ -38,17 +39,17 @@ class HUD:
         self.root=Path(root)
         self.portraits={}
         self.trail={1:100.,2:100.}
-        for i,name in ((1,'wolf'),(2,'rabbit')):
+        for name in HEROES:
             image=sprites[name]['idle'][0][0]
             bbox=image.get_bounding_rect(min_alpha=128)
             # Head and shoulders, keeping the rabbit's ears in the portrait.
-            head=pg.Rect(bbox.x,bbox.y,bbox.width,int(bbox.height*(.50 if i==2 else .44)))
+            head=pg.Rect(bbox.x,bbox.y,bbox.width,int(bbox.height*HERO_DATA[name]['head']))
             upper=image.subsurface(head)
             trim=upper.get_bounding_rect(min_alpha=128)
             head=pg.Rect(head.x+trim.x,head.y+trim.y,trim.width,trim.height)
             crop=image.subsurface(head)
             scale=min(108/head.width,96/head.height)
-            self.portraits[i]=pg.transform.smoothscale(crop,(round(head.width*scale),round(head.height*scale)))
+            self.portraits[name]=pg.transform.smoothscale(crop,(round(head.width*scale),round(head.height*scale)))
 
     def label(self,surface,text,center,size=22,color=LIGHT):
         if size not in self.fonts:
@@ -73,13 +74,13 @@ class HUD:
                 return points if left else [(1152-x,y) for x,y in points]
             portrait_frame=pts([(10,10),(109,1),(137,30),(116,111),(21,117),(1,67)])
             bevel(top,portrait_frame)
-            portrait=self.portraits[1 if f.hero=='wolf' else 2]
-            if (f.hero=='wolf') != left:portrait=pg.transform.flip(portrait,True,False)
+            portrait=self.portraits[f.hero]
+            if (HERO_DATA[f.hero]['face']>0) != left:portrait=pg.transform.flip(portrait,True,False)
             top.blit(portrait,portrait.get_rect(midbottom=(66 if left else 1086,107)))
             pg.draw.polygon(top,GOLD,portrait_frame,3)
             self.label(top,'P1' if left else 'ИИ' if mode_ai else 'P2',(66 if left else 1086,124),12)
             bevel(top,pts([(133,8),(280,8),(304,32),(125,32)]))
-            self.label(top,'ВОЛК' if f.hero=='wolf' else 'ЗАЯЦ',(210 if left else 942,20),24)
+            self.label(top,NAMES[f.hero],(210 if left else 942,20),18 if len(NAMES[f.hero])>7 else 24)
             outer=pts([(134,39),(519,39),(538,73),(123,73)])
             bevel(top,outer)
             # Draw into a small mask to preserve the slanted end caps.

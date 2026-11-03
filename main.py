@@ -11,7 +11,8 @@ import pygame as pg
 from animation import ACTIONS, action_for, frame_for, phase_for, motion_index
 from hud import HUD
 from impact import draw_impacts
-from menu import Menu, NAMES
+from menu import Menu
+from roster import HEROES, NAMES, HERO_DATA
 import settings as preferences
 from music import Music
 from camera import BattleCamera
@@ -88,7 +89,7 @@ class Game:
         self.motion_flips = {}
         manifest = json.loads((ROOT/'assets/v4/manifest.json').read_text())
         self.motion_steps = manifest['steps']
-        for name in ('wolf','rabbit'):
+        for name in HEROES:
             self.sprites[name] = {}
             self.motion[name] = {}
             for action in ACTIONS:
@@ -99,14 +100,14 @@ class Game:
                 keys=[frames[i][0] for i in indices]
                 self.sprites[name][action]=(keys,[pg.transform.flip(im,True,False) for im in keys])
         self.contact_points = {}
-        for name in ('wolf','rabbit'):
+        for name in HEROES:
             for action in ATTACKS:
                 image = self.sprites[name][action][0][1]
                 bounds = image.get_bounding_rect(min_alpha=128)
                 # Search the upper body so an extended shoe cannot be
                 # mistaken for the striking fist (especially rabbit special).
                 y0,y1 = bounds.top+int(bounds.height*.12),bounds.top+int(bounds.height*.70)
-                search = range(bounds.right-1,bounds.left-1,-1) if name=='wolf' else range(bounds.left,bounds.right)
+                search = range(bounds.right-1,bounds.left-1,-1) if HERO_DATA[name]['face']>0 else range(bounds.left,bounds.right)
                 tip = next(x for x in search if sum(image.get_at((x,y)).a>180 for y in range(y0,y1))>=3)
                 xs = range(max(bounds.left,tip-3),min(bounds.right,tip+4))
                 ys = [y for x in xs for y in range(y0,y1) if image.get_at((x,y)).a>180]
@@ -134,6 +135,7 @@ class Game:
         self.p1, self.p2 = Fighter(1,330,1,hero=heroes[0],wins=wins[0]), Fighter(2,820,-1,hero=heroes[1],wins=wins[1])
         self.previous_positions = {1:(330.,float(GROUND)),2:(820.,float(GROUND))}
         self.render_alpha = 1.
+        if hasattr(self,'motion_flips'):self.motion_flips.clear()
         self.phase, self.phase_time, self.remaining = 'intro', 1.65, 75.0
         self.paused = False
         self.shake = self.flash = 0
@@ -196,7 +198,7 @@ class Game:
         defender.attack = None
         self.shake = 3 if guarded else 13 if attack.damage > 15 else 7
         self.flash = .05 if guarded else .11
-        color = '#a8d9fa' if guarded else '#ffb06a' if attacker.hero == 'wolf' else '#a5eaff'
+        color = '#a8d9fa' if guarded else HERO_DATA[attacker.hero]['color']
         for _ in range(8 if guarded else 18):
             self.particles.append([cx, cy, random.uniform(-270,270), random.uniform(-320,90), random.uniform(.18,.48), random.uniform(2,8), color])
         if defender.hp <= 0:
@@ -349,7 +351,7 @@ class Game:
         phase=phase_for(action,f,self.clock,self.phase,self.phase_time,ATTACKS)
         index=motion_index(phase,self.motion_steps)
         image,offset=self.motion[name][action][index]
-        flip=f.face != (1 if name=='wolf' else -1)
+        flip=f.face != HERO_DATA[name]['face']
         if flip:
             cache_key=(name,action,index)
             if cache_key not in self.motion_flips:

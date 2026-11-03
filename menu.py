@@ -3,8 +3,7 @@ import math
 import pygame as pg
 import pygame.gfxdraw as gfx
 
-NAMES={'wolf':'ВОЛК','rabbit':'ЗАЯЦ'}
-HEROES=('wolf','rabbit')
+from roster import HEROES, NAMES, HERO_DATA
 PURPLE='#9c39dc';YELLOW='#ffdf59';PINK='#ed437e';TEAL='#4fe1d6';INK='#171027'
 
 
@@ -29,9 +28,9 @@ class Menu:
             factor=320/crop.get_height()
             self.heroes[name]=pg.transform.smoothscale(crop,(round(crop.get_width()*factor),320))
             self.card_heroes[name]=pg.transform.smoothscale(crop,(round(crop.get_width()*270/crop.get_height()),270))
-            head=crop.subsurface((0,0,crop.get_width(),round(crop.get_height()*(.46 if name=='wolf' else .51))))
+            head=crop.subsurface((0,0,crop.get_width(),round(crop.get_height()*HERO_DATA[name]['head'])))
             head=head.subsurface(head.get_bounding_rect(min_alpha=128))
-            factor=min(144/head.get_width(),150/head.get_height())
+            factor=min(112/head.get_width(),84/head.get_height())
             self.roster_portraits[name]=pg.transform.smoothscale(head,(round(head.get_width()*factor),round(head.get_height()*factor)))
 
     def font(self,size,display=False):
@@ -75,7 +74,7 @@ class Menu:
                     ('settings',pg.Rect(585,470,450,76),'НАСТРОЙКИ'),
                     ('quit',pg.Rect(565,569,450,76),'ВЫХОД')]
         if scene=='select':
-            return [('wolf',pg.Rect(656,302,168,218),'ВОЛК'),('rabbit',pg.Rect(856,302,168,218),'ЗАЯЦ'),
+            return [(hero,pg.Rect(656+(i%2)*200,294+(i//2)*142,168,126),NAMES[hero]) for i,hero in enumerate(HEROES)]+[
                     ('back',pg.Rect(65,655,230,61),'НАЗАД'),
                     ('confirm',pg.Rect(735,655,350,61),'НАЧАТЬ БОЙ' if self.stage else 'ПОДТВЕРДИТЬ')]
         if scene=='settings':
@@ -107,7 +106,7 @@ class Menu:
             tag=self.font(56,True).render('ГО-ГО-ГО',True,PINK)
             surface.blit(pg.transform.rotate(tag,12),(38,299))
             self.text(surface,'BIZARRE / BATTLE',(653,184),32,YELLOW,True)
-            self.text(surface,'01   ВЫБЕРИ СВОЙ ПУТЬ',(656,228),17,TEAL)
+            self.text(surface,'4 БОЙЦА / 2 РЕЖИМА',(656,228),17,TEAL)
         elif scene=='select':
             self.text(surface,'ВЫБОР ГЕРОЯ',(576,69),49,YELLOW,True,True)
             role='ИГРОК 1' if self.stage==0 else ('СОПЕРНИК: ИИ' if self.game.mode_ai else 'ИГРОК 2')
@@ -118,7 +117,7 @@ class Menu:
             self.panel(surface,pg.Rect(75,225,460,373),'#b18bca')
             self.text(surface,NAMES[selected_name],(305,250),30,YELLOW,True,True)
             char=self.heroes[selected_name]
-            if selected_name=='rabbit':char=pg.transform.flip(char,True,False)
+            if HERO_DATA[selected_name]['face']<0:char=pg.transform.flip(char,True,False)
             surface.blit(char,char.get_rect(midbottom=(305,589)))
             self.panel(surface,pg.Rect(611,225,465,373),'#b18bca')
             self.text(surface,'ВЫБЕРИТЕ БОЙЦА',(844,252),23,YELLOW,True,True)
@@ -127,12 +126,12 @@ class Menu:
                 selected=i==self.cursor
                 self.panel(surface,rect,accent if selected else '#735780')
                 portrait=self.roster_portraits[name]
-                surface.blit(portrait,portrait.get_rect(center=(rect.centerx,rect.y+96)))
+                surface.blit(portrait,portrait.get_rect(center=(rect.centerx,rect.y+48)))
                 self.text(surface,f'{i+1:02}',(rect.x+13,rect.y+8),14,accent if selected else '#bfa6cd')
-                self.text(surface,NAMES[name],(rect.centerx,rect.bottom-27),23,YELLOW,True,True)
+                self.text(surface,NAMES[name],(rect.centerx,rect.bottom-17),15 if len(NAMES[name])>7 else 17,YELLOW,True,True)
                 if selected:
                     pg.draw.rect(surface,accent,(rect.x+18,rect.bottom-7,rect.width-30,4))
-            self.text(surface,'ВЫБРАН: '+NAMES[selected_name],(844,556),19,accent,False,True)
+            self.text(surface,'ВЫБРАН: '+NAMES[selected_name],(844,582),15,accent,False,True)
             self.text(surface,'P1: '+NAMES[self.choice[0]],(100,615),20,TEAL)
             self.text(surface,('ИИ: ' if self.game.mode_ai else 'P2: ')+NAMES[self.choice[1]],(840,615),20,PINK)
             self.text(surface,'Можно выбрать одинаковых героев',(576,617),17,'#d5bfe4',False,True)
@@ -233,8 +232,13 @@ class Menu:
         if event.key==pg.K_ESCAPE:
             self.activate('resume' if scene=='pause' else 'quit' if scene=='main' else 'back');return
         if scene=='select':
-            if event.key in (pg.K_LEFT,pg.K_RIGHT,pg.K_a,pg.K_d):
-                self.cursor=1-self.cursor;self.choice[self.stage]=HEROES[self.cursor]
+            if event.key in (pg.K_LEFT,pg.K_RIGHT,pg.K_a,pg.K_d,pg.K_UP,pg.K_DOWN,pg.K_w,pg.K_s):
+                if event.key in (pg.K_UP,pg.K_w,pg.K_DOWN,pg.K_s):
+                    self.cursor=(self.cursor+(-2 if event.key in (pg.K_UP,pg.K_w) else 2))%len(HEROES)
+                else:
+                    row,col=divmod(self.cursor,2)
+                    self.cursor=row*2+(col+(-1 if event.key in (pg.K_LEFT,pg.K_a) else 1))%2
+                self.choice[self.stage]=HEROES[self.cursor]
             elif event.key in (pg.K_RETURN,pg.K_SPACE,pg.K_j,pg.K_u):self.activate('confirm')
         elif event.key in (pg.K_UP,pg.K_DOWN,pg.K_w,pg.K_s):
             self.focus=(self.focus+(-1 if event.key in (pg.K_UP,pg.K_w) else 1))%len(buttons);self.hover=None
