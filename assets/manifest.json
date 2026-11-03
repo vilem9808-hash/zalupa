@@ -1,0 +1,23 @@
+{
+  "frames": {
+    "idle": 10,
+    "walk": 12,
+    "jump": 9,
+    "block": 9,
+    "light": 10,
+    "heavy": 12,
+    "special": 14,
+    "hit": 9,
+    "death": 11
+  },
+  "dimensions": {
+    "wolf": [
+      341,
+      440
+    ],
+    "rabbit": [
+      349,
+      440
+    ]
+  }
+}
