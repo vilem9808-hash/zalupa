@@ -21,6 +21,13 @@ class ContactTests(unittest.TestCase):
         self.assertEqual(frame_for('heavy',g.p1,g.clock,g.phase,g.phase_time,ATTACKS),1)
         self.assertEqual(action_for(g.p2),'hit')
 
+    def test_hitstop_keeps_render_position_stationary(self):
+        g=self.g
+        g.hit_stop=.03
+        g.previous_positions={1:(490,523),2:(595,523)}
+        g.step(1/120)
+        self.assertEqual(g.previous_positions,{1:(g.p1.x,g.p1.y),2:(g.p2.x,g.p2.y)})
+
     def test_miss_has_no_contact_effect(self):
         g=self.g;g.p2.x=900
         g.hit(g.p1,g.p2,ATTACKS['heavy'])

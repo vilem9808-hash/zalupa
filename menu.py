@@ -133,6 +133,7 @@ class Menu:
 
     def activate(self,action):
         g=self.game
+        previous_scene=g.scene
         if action in ('ai','pvp'):
             g.mode_ai=action=='ai';g.scene='select'
             self.stage=0;self.cursor=HEROES.index(g.selected_heroes[0]);self.choice=list(g.selected_heroes)
@@ -156,7 +157,10 @@ class Menu:
         elif action=='resume':g.scene='battle';g.paused=False;g.keys.clear();g.pressed.clear()
         elif action=='main':g.scene='main';g.paused=False;g.keys.clear();g.pressed.clear()
         elif action=='quit':g.running=False
-        self.focus=0;self.hover=None
+        if g.scene!=previous_scene:self.focus=0
+        elif action in ('fullscreen','shake'):
+            self.focus=next(i for i,(a,_,_) in enumerate(self.buttons(g.scene)) if a==action)
+        self.hover=None
 
     def event(self,event,point=None):
         scene=self.game.scene

@@ -281,6 +281,7 @@ class Game:
             self.hit_stop -= frozen
             dt -= frozen
             if dt <= 0:
+                self.previous_positions = {f.id:(f.x,f.y) for f in (self.p1,self.p2)}
                 return
         self.previous_positions = {f.id:(f.x,f.y) for f in (self.p1,self.p2)}
         self.clock += dt

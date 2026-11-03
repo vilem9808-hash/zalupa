@@ -112,6 +112,15 @@ class MenuTests(unittest.TestCase):
                 roots.append(xs[len(xs)//2]+offset[0])
             self.assertLess(max(roots)-min(roots),20)
 
+    def test_settings_toggle_keeps_keyboard_focus(self):
+        g=self.g;g.menu.activate('settings');g.menu.focus=1
+        self.key(pg.K_RETURN)
+        self.assertTrue(g.preferences['camera_shake'])
+        self.assertEqual(g.menu.focus,1)
+        self.key(pg.K_RETURN)
+        self.assertFalse(g.preferences['camera_shake'])
+        self.assertFalse(g.preferences['fullscreen'])
+
     def test_corrupt_preferences_fall_back(self):
         self.path.write_text('[]')
         self.assertEqual(settings.load(self.path),settings.DEFAULTS)
