@@ -8,7 +8,7 @@ def action_for(fighter):
     if fighter.hp <= 0:
         return 'death'
     if fighter.stun > 0:
-        return 'hit'
+        return 'block' if getattr(fighter,'guarded',False) else 'hit'
     if fighter.attack:
         return fighter.attack
     if fighter.block:
@@ -34,9 +34,13 @@ def frame_for(action, fighter, clock, phase, phase_time, attacks):
     if action == 'jump':
         return 0 if fighter.vy < -300 else 1 if fighter.vy < 300 else 2
     if action == 'block':
-        return 1 if math.sin(clock*5) > 0 else 2
+        if getattr(fighter,'guarded',False) and fighter.stun > 0:
+            return 0
+        age = getattr(fighter,'block_time',.1)
+        return 2 if age < .05 else 1 if age < .1 else 0
     if action == 'hit':
-        return 0 if fighter.stun > .24 else 1 if fighter.stun > .10 else 2
+        progress = 1-fighter.stun/max(.001,getattr(fighter,'stun_total',.37))
+        return min(2,int(max(0,progress)*3))
     if action == 'death':
         elapsed = max(0, 2.5-phase_time)
         return 2 if phase == 'match' or elapsed >= .65 else 1 if elapsed >= .25 else 0

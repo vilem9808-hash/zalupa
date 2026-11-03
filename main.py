@@ -8,6 +8,8 @@ import random
 import sys
 import pygame as pg
 from animation import ACTIONS, action_for, frame_for
+from hud import HUD
+from impact import draw_impacts
 
 ROOT = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent))
 W, H, GROUND = 1152, 648, 523
@@ -26,9 +28,9 @@ class Attack:
     cost: int = 0
 
 ATTACKS = {
-    'light': Attack(.28, .115, 120, 7, 22, .16),
-    'heavy': Attack(.58, .29, 145, 16, 65, .27),
-    'special': Attack(.74, .35, 215, 23, 110, .37, 40),
+    'light': Attack(.28, .115, 220, 7, 22, .16),
+    'heavy': Attack(.58, .29, 265, 16, 65, .27),
+    'special': Attack(.74, .35, 320, 23, 110, .37, 40),
 }
 
 @dataclass
@@ -50,13 +52,18 @@ class Fighter:
     block: bool = False
     walk: float = 0
     ai_block: float = 0
+    stun_total: float = 0
+    guarded: bool = False
+    knockback: float = 0
+    recoil: float = 0
+    block_time: float = 0
 
 class Game:
     def __init__(self):
         pg.display.init()
         pg.font.init()
         self.window = pg.display.set_mode((1152, 760), pg.RESIZABLE)
-        pg.display.set_caption('ВОЛК vs ЗАЯЦ — Python Edition')
+        pg.display.set_caption('ВОЛК vs ЗАЯЦ — Galactic Duel')
         self.screen = pg.Surface((W, 760))
         self.arena = pg.Surface((W, H))
         self.fonts = {}
@@ -64,8 +71,22 @@ class Game:
         for name in ('wolf', 'rabbit'):
             self.sprites[name] = {}
             for action in ACTIONS:
-                frames = [pg.image.load(str(ROOT / f'assets/v2/{name}/{action}_{i}.png')).convert_alpha() for i in range(1,4)]
+                frames = [pg.image.load(str(ROOT / f'assets/v3/{name}/{action}_{i}.png')).convert_alpha() for i in range(1,4)]
                 self.sprites[name][action] = (frames, [pg.transform.flip(f, True, False) for f in frames])
+        self.contact_points = {}
+        for name in ('wolf','rabbit'):
+            for action in ATTACKS:
+                image = self.sprites[name][action][0][1]
+                bounds = image.get_bounding_rect(min_alpha=128)
+                # Search the upper body so an extended shoe cannot be
+                # mistaken for the striking fist (especially rabbit special).
+                y0,y1 = bounds.top+int(bounds.height*.12),bounds.top+int(bounds.height*.70)
+                search = range(bounds.right-1,bounds.left-1,-1) if name=='wolf' else range(bounds.left,bounds.right)
+                tip = next(x for x in search if sum(image.get_at((x,y)).a>180 for y in range(y0,y1))>=3)
+                xs = range(max(bounds.left,tip-3),min(bounds.right,tip+4))
+                ys = [y for x in xs for y in range(y0,y1) if image.get_at((x,y)).a>180]
+                self.contact_points[(name,action)] = sum(ys)/len(ys)-image.get_height() if ys else -215
+        self.hud = HUD(ROOT, self.sprites)
         self.background = pg.transform.smoothscale(pg.image.load(str(ROOT / 'assets/arena.png')).convert(), (W+28, H+18))
         self.mode_ai = True
         self.keys, self.pressed = set(), set()
@@ -81,6 +102,11 @@ class Game:
         self.paused = False
         self.shake = self.flash = 0
         self.particles = []
+        self.impacts = []
+        self.hit_stop = 0
+        self.pose_states = {}
+        if hasattr(self, 'hud'):
+            self.hud.reset()
         self.winner = None
         self.ai_tick = 0
         self.pressed.clear()
@@ -106,6 +132,7 @@ class Game:
             return False
         f.attack, f.attack_time, f.hit_done, f.vx = kind, 0, False, 0
         f.energy -= attack.cost
+        f.guarded = False
         return True
 
     def hit(self, attacker, defender, attack):
@@ -118,13 +145,24 @@ class Game:
         defender.energy = clamp(defender.energy+(4 if guarded else 10), 0, 100)
         attacker.energy = clamp(attacker.energy+(5 if guarded else 12), 0, 100)
         defender.stun = .09 if guarded else attack.stun
-        defender.vx = attacker.face*attack.push*(.35 if guarded else 1)
+        defender.stun_total = defender.stun
+        defender.guarded = guarded
+        defender.knockback = attacker.face*(attack.push*3+60)*(.28 if guarded else 1)
+        defender.recoil = 4 if guarded else 8 if attack.damage < 10 else 15
+        defender.vx = 0
+        self.hit_stop = .035 if guarded else .045 if attack.damage < 10 else .075 if attack.damage < 20 else .095
+        cx = defender.x-attacker.face*32
+        kind = attacker.attack or next((key for key,value in ATTACKS.items() if value==attack),'light')
+        name = 'wolf' if attacker.id==1 else 'rabbit'
+        fist_y = getattr(self,'contact_points',{}).get((name,kind),-215)
+        cy = clamp(attacker.y+fist_y,defender.y-330,defender.y-70)
+        self.impacts.append([cx,cy,.24,.24,guarded,attacker.face,attack.damage])
         defender.attack = None
         self.shake = 3 if guarded else 13 if attack.damage > 15 else 7
         self.flash = .05 if guarded else .11
         color = '#a8d9fa' if guarded else '#ffb06a' if attacker.id == 1 else '#a5eaff'
         for _ in range(8 if guarded else 18):
-            self.particles.append([defender.x-attacker.face*30, defender.y-120, random.uniform(-270,270), random.uniform(-320,90), random.uniform(.18,.48), random.uniform(2,8), color])
+            self.particles.append([cx, cy, random.uniform(-270,270), random.uniform(-320,90), random.uniform(.18,.48), random.uniform(2,8), color])
         if defender.hp <= 0:
             self.round_end(attacker)
 
@@ -132,6 +170,7 @@ class Game:
         left, right, jump, block, light, heavy, special = bindings
         alive = self.phase == 'fight' and f.stun <= 0
         f.block = alive and block in self.keys and f.on_ground and not f.attack
+        f.block_time = f.block_time+dt if f.block else 0
         direction = (int(right in self.keys)-int(left in self.keys)) if alive and not f.block else 0
         if not f.attack and alive:
             f.vx = direction*(420 if pg.K_LSHIFT in self.keys or pg.K_RSHIFT in self.keys else 285)
@@ -157,21 +196,22 @@ class Game:
             return
         if self.ai_tick <= 0:
             self.ai_tick = random.uniform(.11,.24)
-            f.ai_block = random.uniform(.1,.34) if op.attack and dist < 170 and random.random() < .65 else 0
-            if dist < 175 and random.random() < .54:
+            f.ai_block = random.uniform(.1,.34) if op.attack and dist < 285 and random.random() < .65 else 0
+            if dist < 285 and random.random() < .54:
                 self.start_attack(f, 'heavy' if random.random() < .3 else 'light')
-            elif dist < 220 and f.energy >= 40 and random.random() < .3:
+            elif dist < 340 and f.energy >= 40 and random.random() < .3:
                 self.start_attack(f, 'special')
-            elif dist < 250 and random.random() < .12 and f.on_ground:
+            elif dist < 350 and random.random() < .12 and f.on_ground:
                 f.vy, f.on_ground = -740, False
         f.ai_block = max(0, f.ai_block-dt)
         f.block = f.ai_block > 0 and f.on_ground and not f.attack
+        f.block_time = f.block_time+dt if f.block else 0
         sign = 1 if d >= 0 else -1
         if f.block or f.attack:
             f.vx = 0
-        elif dist > 118:
+        elif dist > 235:
             f.vx = sign*(325 if dist > 260 else 190)
-        elif dist < 72:
+        elif dist < 215:
             f.vx = -sign*115
         else:
             f.vx *= .7
@@ -190,13 +230,15 @@ class Game:
                 self.hit(f, opponent, attack)
             if f.attack_time >= attack.duration:
                 f.attack, f.attack_time = None, 0
+        f.knockback *= math.exp(-8*dt)
+        f.recoil = max(0, f.recoil-50*dt)
         f.vy += 1950*dt
         f.y += f.vy*dt
         if f.y >= GROUND:
             f.y, f.vy, f.on_ground = GROUND, 0, True
         else:
             f.on_ground = False
-        f.x = clamp(f.x+f.vx*dt, 110, W-110)
+        f.x = clamp(f.x+(f.vx+f.knockback)*dt, 110, W-110)
         if not f.attack and not f.stun:
             f.face = 1 if opponent.x >= f.x else -1
 
@@ -204,7 +246,18 @@ class Game:
         if self.paused:
             self.pressed.clear()
             return
+        if self.hit_stop > 0:
+            frozen = min(dt,self.hit_stop)
+            self.hit_stop -= frozen
+            dt -= frozen
+            if dt <= 0:
+                return
         self.clock += dt
+        if hasattr(self, 'hud'):
+            self.hud.update((self.p1,self.p2),dt)
+        for effect in self.impacts:
+            effect[2] -= dt
+        self.impacts = [effect for effect in self.impacts if effect[2] > 0]
         self.shake = max(0, self.shake-32*dt)
         self.flash = max(0, self.flash-dt)
         for p in self.particles:
@@ -237,10 +290,11 @@ class Game:
                 else:
                     self.control(self.p2, (pg.K_LEFT,pg.K_RIGHT,pg.K_UP,pg.K_DOWN,pg.K_u,pg.K_i,pg.K_o), dt)
         self.update_fighter(self.p1,self.p2,dt)
-        self.update_fighter(self.p2,self.p1,dt)
-        if self.p1.x > self.p2.x-75:
-            mid = clamp((self.p1.x+self.p2.x)/2,148,W-148)
-            self.p1.x, self.p2.x = mid-38, mid+38
+        if self.hit_stop <= 0:
+            self.update_fighter(self.p2,self.p1,dt)
+        if self.p1.x > self.p2.x-220:
+            mid = clamp((self.p1.x+self.p2.x)/2,220,W-220)
+            self.p1.x, self.p2.x = mid-110, mid+110
         self.pressed.clear()
 
     def text(self, surface, text, pos, size=22, color='#f5e9d2', center=False):
@@ -264,18 +318,35 @@ class Game:
         self.arena.blit(shadow,(shadow_x-75,f.y-8))
         bob = math.sin(self.clock*3.6+f.id)*1.8 if action == 'idle' else 0
         # Falling and lying are drawn poses; keep their feet/ground anchor fixed.
-        self.arena.blit(image, image.get_rect(midbottom=(f.x,f.y+bob)))
+        draw_x = f.x - f.face*f.recoil
+        if f.attack and frame == 1:
+            opponent = self.p2 if f.id == 1 else self.p1
+            reach = ATTACKS[f.attack].reach+20
+            gap = (opponent.x-f.x)*f.face
+            if 0 <= gap <= reach and abs(opponent.y-f.y) <= 115:
+                # Stop the drawn fist at the target's front surface.
+                draw_x += f.face*(max(40,gap-32)-reach)
+        # Short dissolves soften pose transitions; the contact pose always snaps
+        # into place so impact timing stays exact instead of showing ghost fists.
+        key = (action, frame, flip)
+        old = self.pose_states.get(f.id)
+        if old is None or old['key'] != key:
+            previous = old['image'] if old and old['key'][2] == flip else None
+            old = {'key':key,'image':image,'previous':previous,'time':self.clock}
+            self.pose_states[f.id] = old
+        blend = min(1,(self.clock-old['time'])/.045)
+        smooth = action in ('idle','walk','run','block') or (f.attack and frame==2)
+        rect = image.get_rect(midbottom=(draw_x,f.y+bob))
+        if smooth and old['previous'] is not None and blend < 1:
+            previous = old['previous'].copy();previous.set_alpha(round(255*(1-blend)))
+            current = image.copy();current.set_alpha(round(255*blend))
+            self.arena.blit(previous,rect);self.arena.blit(current,rect)
+        else:
+            self.arena.blit(image,rect)
         color = '#e849ff' if f.id==1 else '#ffd364'
-        if f.block:
-            pg.draw.arc(self.arena,color,(f.x+f.face*46-43,f.y-242,86,156),-1.1 if f.face==1 else 2.04,1.3 if f.face==1 else 4.24,6)
-        if f.attack:
-            power = math.sin(math.pi*progress)
-            if power>.13:
-                radius = 92 if f.attack=='special' else 73 if f.attack=='heavy' else 48
-                x,y = f.x+f.face*(45+80*power), f.y-167-15*power
-                radii = [radius]+([97,114,131] if f.attack=='special' else [])
-                for r in radii:
-                    pg.draw.arc(self.arena,color,(x-r,y-r,r*2,r*2),-.9 if f.face==1 else math.pi-1.2,1.2 if f.face==1 else math.pi+.9,8)
+        if f.attack == 'special' and not f.hit_done:
+            radius = int(28+12*math.sin(progress*math.pi))
+            pg.draw.arc(self.arena,color,(f.x-radius,f.y-180-radius,radius*2,radius*2),0,math.pi*1.6,2)
 
     def render(self):
         a = self.arena
@@ -290,36 +361,20 @@ class Game:
             self.draw_fighter(f)
         for p in self.particles:
             pg.draw.circle(a,p[6],(p[0],p[1]),max(1,int(p[5]*p[4]/.48)))
+        draw_impacts(a,self.impacts)
         if self.flash:
             flash = pg.Surface((W,H),pg.SRCALPHA)
             flash.fill((255,255,255,int(self.flash/.11*35)))
             a.blit(flash,(0,0))
         self.screen.fill('#090e1a')
-        self.text(self.screen,'ВОЛК vs ЗАЯЦ / PYTHON',(22,15),22,'#e8d1aa')
+        self.text(self.screen,'ВОЛК vs ЗАЯЦ',(22,15),22,'#e8d1aa')
         for rect,label in self.buttons():
             pg.draw.rect(self.screen,'#292b3a',rect,border_radius=7)
             pg.draw.rect(self.screen,'#87746f',rect,1,border_radius=7)
             self.text(self.screen,label,rect.center,16,center=True)
         offset = (random.uniform(-self.shake,self.shake),56+random.uniform(-self.shake*.4,self.shake*.4)) if self.shake else (0,56)
         self.screen.blit(a,offset)
-        hud = pg.Surface((W,125),pg.SRCALPHA)
-        hud.fill((6,11,27,220))
-        for f,x,color,name in ((self.p1,43,'#e349d4','ВОЛК'),(self.p2,684,'#ffd364','ЗАЯЦ')):
-            self.text(hud,name,(x,5),20,color)
-            pg.draw.rect(hud,'#342e47',(x,35,425,27),border_radius=4)
-            width = int(425*f.hp/100)
-            pg.draw.rect(hud,color,(x+(425-width if f.id==2 else 0),35,width,27),border_radius=4)
-            self.text(hud,str(f.hp),(x+212,48),17,center=True)
-            ex = x+175 if f.id==2 else x
-            pg.draw.rect(hud,'#292d43',(ex,78,250,11))
-            ew = int(250*f.energy/100)
-            pg.draw.rect(hud,color,(ex+(250-ew if f.id==2 else 0),78,ew,11))
-            for j in range(2):
-                pg.draw.circle(hud,color if f.wins>j else '#494054',(x+10+j*24,108),7)
-            self.text(hud,f'ЭНЕРГИЯ {f.energy} / 100',(ex,91),12)
-        self.text(hud,f'{math.ceil(self.remaining):02}',(576,46),42,center=True)
-        self.text(hud,f'РАУНД {self.round}',(576,94),16,center=True)
-        self.screen.blit(hud,(0,56))
+        self.hud.draw(self.screen,(self.p1,self.p2),self.remaining,self.round)
         if self.phase!='fight' or self.paused:
             panel = pg.Surface((W,165),pg.SRCALPHA)
             panel.fill((13,20,38,205))
