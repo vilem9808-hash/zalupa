@@ -1,23 +1,26 @@
 {
+  "version": 2,
   "frames": {
-    "idle": 10,
-    "walk": 12,
-    "jump": 9,
-    "block": 9,
-    "light": 10,
-    "heavy": 12,
-    "special": 14,
-    "hit": 9,
-    "death": 11
+    "idle": 3,
+    "walk": 3,
+    "run": 3,
+    "jump": 3,
+    "block": 3,
+    "light": 3,
+    "heavy": 3,
+    "special": 3,
+    "hit": 3,
+    "death": 3
   },
   "dimensions": {
     "wolf": [
-      341,
+      1000,
       440
     ],
     "rabbit": [
-      349,
+      1000,
       440
     ]
-  }
+  },
+  "path": "assets/v2/{character}/{action}_{frame}.png"
 }

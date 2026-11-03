@@ -2,12 +2,12 @@
 from __future__ import annotations
 import argparse
 from dataclasses import dataclass
-import json
 import math
 from pathlib import Path
 import random
 import sys
 import pygame as pg
+from animation import ACTIONS, action_for, frame_for
 
 ROOT = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent))
 W, H, GROUND = 1152, 648, 523
@@ -61,12 +61,10 @@ class Game:
         self.arena = pg.Surface((W, H))
         self.fonts = {}
         self.sprites = {}
-        manifest = json.loads((ROOT / 'assets/manifest.json').read_text())
         for name in ('wolf', 'rabbit'):
-            size = (284, 367) if name == 'wolf' else (267, 346)
             self.sprites[name] = {}
-            for action, count in manifest['frames'].items():
-                frames = [pg.transform.smoothscale(pg.image.load(str(ROOT / f'assets/{name}/{action}_{i}.webp')).convert_alpha(), size) for i in range(1, count+1)]
+            for action in ACTIONS:
+                frames = [pg.image.load(str(ROOT / f'assets/v2/{name}/{action}_{i}.png')).convert_alpha() for i in range(1,4)]
                 self.sprites[name][action] = (frames, [pg.transform.flip(f, True, False) for f in frames])
         self.background = pg.transform.smoothscale(pg.image.load(str(ROOT / 'assets/arena.png')).convert(), (W+28, H+18))
         self.mode_ai = True
@@ -136,7 +134,7 @@ class Game:
         f.block = alive and block in self.keys and f.on_ground and not f.attack
         direction = (int(right in self.keys)-int(left in self.keys)) if alive and not f.block else 0
         if not f.attack and alive:
-            f.vx = direction*285
+            f.vx = direction*(420 if pg.K_LSHIFT in self.keys or pg.K_RSHIFT in self.keys else 285)
             if direction:
                 f.walk += dt*11
             if jump in self.pressed and f.on_ground and not f.block:
@@ -172,7 +170,7 @@ class Game:
         if f.block or f.attack:
             f.vx = 0
         elif dist > 118:
-            f.vx = sign*190
+            f.vx = sign*(325 if dist > 260 else 190)
         elif dist < 72:
             f.vx = -sign*115
         else:
@@ -254,32 +252,19 @@ class Game:
 
     def draw_fighter(self, f):
         name = 'wolf' if f.id == 1 else 'rabbit'
-        action = ('death' if f.hp <= 0 else 'hit' if f.stun>0 else f.attack if f.attack else 'block' if f.block else 'jump' if not f.on_ground else 'walk' if abs(f.vx)>28 else 'idle')
-        if f.attack:
-            progress = clamp(f.attack_time/ATTACKS[f.attack].duration,0,.999)
-        elif action == 'walk':
-            progress = (f.walk/(math.pi*2))%1
-        elif action == 'jump':
-            progress = clamp((f.vy+760)/1520,0,.999)
-        elif action == 'hit':
-            progress = clamp((.37-f.stun)/.37,0,.999)
-        elif action == 'death':
-            progress = 1 if self.phase == 'match' else clamp((2.5-self.phase_time)/2.5,0,.999)
-        elif action == 'block':
-            progress = .58+.14*math.sin(self.clock*4.2)
-        else:
-            progress = (self.clock*1.05+(0 if f.id==1 else .25))%1
+        action = action_for(f)
+        frame = frame_for(action, f, self.clock, self.phase, self.phase_time, ATTACKS)
+        progress = clamp(f.attack_time/ATTACKS[f.attack].duration,0,.999) if f.attack else 0
         flip = f.face != (1 if f.id==1 else -1)
-        frames = self.sprites[name][action][int(flip)]
-        image = frames[min(len(frames)-1,int(progress*len(frames))) ]
+        image = self.sprites[name][action][int(flip)][frame]
         shadow = pg.Surface((150,28),pg.SRCALPHA)
         pg.draw.ellipse(shadow,(9,3,27,150),(5,4,140,20))
-        self.arena.blit(shadow,(f.x-75,f.y-8))
+        feet = image.subsurface((0,image.get_height()-40,image.get_width(),40)).get_bounding_rect(min_alpha=128)
+        shadow_x = f.x-image.get_width()/2+feet.centerx if feet.width else f.x
+        self.arena.blit(shadow,(shadow_x-75,f.y-8))
         bob = math.sin(self.clock*3.6+f.id)*1.8 if action == 'idle' else 0
-        if action == 'death':
-            image = pg.transform.rotate(image, f.face*progress*12.6)
-            image.set_alpha(int(255*(1-.48*progress)))
-        self.arena.blit(image, image.get_rect(midbottom=(f.x,f.y+bob+(42*progress if action=='death' else 0))))
+        # Falling and lying are drawn poses; keep their feet/ground anchor fixed.
+        self.arena.blit(image, image.get_rect(midbottom=(f.x,f.y+bob)))
         color = '#e849ff' if f.id==1 else '#ffd364'
         if f.block:
             pg.draw.arc(self.arena,color,(f.x+f.face*46-43,f.y-242,86,156),-1.1 if f.face==1 else 2.04,1.3 if f.face==1 else 4.24,6)
@@ -351,7 +336,7 @@ class Game:
             self.text(panel,subtitle,(W//2,120),20,center=True)
             self.screen.blit(panel,(0,291))
         self.text(self.screen,'1: A/D — движение   W — прыжок   S — блок   J/K/L — быстрый / сильный / спецприём',(W//2,722),15,center=True)
-        self.text(self.screen,'2: ←/→ ↑ ↓   U/I/O — атаки     P — пауза    R — заново    F2 — режим    F11 — полный экран',(W//2,747),15,center=True)
+        self.text(self.screen,'2: ←/→ ↑ ↓   U/I/O — атаки     P — пауза    R — заново    Shift — бег    F2 — режим    F11 — экран',(W//2,747),15,center=True)
         size = self.window.get_size()
         scale = min(size[0]/W,size[1]/760)
         dest = (max(1,int(W*scale)),max(1,int(760*scale)))
