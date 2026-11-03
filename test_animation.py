@@ -1,6 +1,6 @@
 import unittest
 from types import SimpleNamespace
-from animation import action_for, frame_for
+from animation import action_for, frame_for, phase_for, motion_index
 from main import ATTACKS
 
 class AnimationTests(unittest.TestCase):
@@ -21,6 +21,14 @@ class AnimationTests(unittest.TestCase):
             self.assertEqual(frame_for(name,f,0,'fight',0,ATTACKS),1)
             f.attack_time=attack.duration-.001
             self.assertEqual(frame_for(name,f,0,'fight',0,ATTACKS),2)
+
+    def test_continuous_attack_uses_exact_contact_keyframe(self):
+        for name,attack in ATTACKS.items():
+            fighter=self.fighter(attack=name,attack_time=attack.hit_at)
+            phase=phase_for(name,fighter,0,'fight',0,ATTACKS)
+            self.assertEqual(motion_index(phase),8)
+            fighter.attack_time=attack.duration
+            self.assertEqual(motion_index(phase_for(name,fighter,0,'fight',0,ATTACKS)),16)
 
     def test_death_stays_lying(self):
         f=self.fighter(hp=0)

@@ -65,7 +65,7 @@ class HUD:
         for f in fighters:
             self.trail[f.id] = max(float(f.hp), self.trail[f.id]-30*dt) if f.hp<self.trail[f.id] else float(f.hp)
 
-    def draw(self,screen,fighters,remaining,round_no):
+    def draw(self,screen,fighters,remaining,round_no,mode_ai=False):
         top=pg.Surface((1152,132),pg.SRCALPHA)
         for f in fighters:
             left=f.id==1
@@ -73,11 +73,13 @@ class HUD:
                 return points if left else [(1152-x,y) for x,y in points]
             portrait_frame=pts([(10,10),(109,1),(137,30),(116,111),(21,117),(1,67)])
             bevel(top,portrait_frame)
-            portrait=self.portraits[f.id]
+            portrait=self.portraits[1 if f.hero=='wolf' else 2]
+            if (f.hero=='wolf') != left:portrait=pg.transform.flip(portrait,True,False)
             top.blit(portrait,portrait.get_rect(midbottom=(66 if left else 1086,107)))
             pg.draw.polygon(top,GOLD,portrait_frame,3)
+            self.label(top,'P1' if left else 'ИИ' if mode_ai else 'P2',(66 if left else 1086,124),12)
             bevel(top,pts([(133,8),(280,8),(304,32),(125,32)]))
-            self.label(top,'ВОЛК' if left else 'ЗАЯЦ',(210 if left else 942,20),24)
+            self.label(top,'ВОЛК' if f.hero=='wolf' else 'ЗАЯЦ',(210 if left else 942,20),24)
             outer=pts([(134,39),(519,39),(538,73),(123,73)])
             bevel(top,outer)
             # Draw into a small mask to preserve the slanted end caps.

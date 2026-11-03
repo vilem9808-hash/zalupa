@@ -1,26 +1,16 @@
 {
-  "version": 3,
+  "version": 4,
   "frames": {
-    "idle": 3,
-    "walk": 3,
-    "run": 3,
-    "jump": 3,
-    "block": 3,
-    "light": 3,
-    "heavy": 3,
-    "special": 3,
-    "hit": 3,
-    "death": 3
+    "idle": 24,
+    "walk": 24,
+    "run": 24,
+    "jump": 24,
+    "block": 24,
+    "light": 24,
+    "heavy": 24,
+    "special": 24,
+    "hit": 24,
+    "death": 24
   },
-  "dimensions": {
-    "wolf": [
-      1000,
-      440
-    ],
-    "rabbit": [
-      1000,
-      440
-    ]
-  },
-  "path": "assets/v3/{character}/{action}_{frame}.png"
+  "motion_manifest": "assets/v4/manifest.json"
 }

@@ -45,3 +45,30 @@ def frame_for(action, fighter, clock, phase, phase_time, attacks):
         elapsed = max(0, 2.5-phase_time)
         return 2 if phase == 'match' or elapsed >= .65 else 1 if elapsed >= .25 else 0
     return (0, 1, 2, 1)[int((clock + fighter.id*.17)*4) % 4]
+
+
+def phase_for(action, fighter, clock, phase, phase_time, attacks):
+    """Continuous key-pose coordinate; baked motion supplies eight in-betweens."""
+    if action in attacks:
+        a=attacks[action];t=fighter.attack_time
+        if t<=a.hit_at:
+            u=max(0,min(1,t/a.hit_at))
+            return u*u*(3-2*u)
+        hold=min(.025,(a.duration-a.hit_at)*.15)
+        u=max(0,min(1,(t-a.hit_at-hold)/max(.01,a.duration-a.hit_at-hold)))
+        return 1+u*u*(3-2*u)
+    if action in ('walk','run'):
+        return (fighter.walk*(.4 if action=='walk' else .6))%3
+    if action=='idle':return (clock*1.2+fighter.id*.13)%3
+    if action=='jump':return max(0,min(2,(fighter.vy+760)/760))
+    if action=='block':
+        if fighter.stun>0 and getattr(fighter,'guarded',False):return 0
+        return 2*(1-max(0,min(1,getattr(fighter,'block_time',.12)/.12)))
+    if action=='hit':
+        return 2*max(0,min(1,1-fighter.stun/max(.001,getattr(fighter,'stun_total',.37))))
+    if action=='death':return 2 if phase=='match' else 2*max(0,min(1,(2.5-phase_time)/.7))
+    return 0
+
+
+def motion_index(phase, steps=8):
+    return max(0,min(3*steps-1,int(phase*steps+.00001)))
