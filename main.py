@@ -92,7 +92,8 @@ class Game:
                 entries=manifest['characters'][name][action]
                 frames=[(pg.image.load(str(ROOT/f"assets/v4/{name}/{action}/{item['file']}")).convert_alpha(),tuple(item['offset'])) for item in entries]
                 self.motion[name][action]=frames
-                keys=[frames[i*self.motion_steps][0] for i in range(3)]
+                indices=manifest.get('keyframes',{}).get(action,[i*self.motion_steps for i in range(3)])
+                keys=[frames[i][0] for i in indices]
                 self.sprites[name][action]=(keys,[pg.transform.flip(im,True,False) for im in keys])
         self.contact_points = {}
         for name in ('wolf','rabbit'):

@@ -162,6 +162,22 @@ class MenuTests(unittest.TestCase):
         g.open_pause();g.menu.activate('settings')
         self.assertTrue(pg.mixer.music.get_busy())
 
+    def test_walking_has_eight_distinct_key_poses(self):
+        for hero in HEROES:
+            keys=self.g.sprites[hero]['walk'][0]
+            frames=self.g.motion[hero]['walk']
+            self.assertEqual(len(keys),8)
+            self.assertEqual(len(frames),24)
+            self.assertEqual(len({pg.image.tobytes(image,'RGBA') for image in keys}),8)
+            roots=[]
+            for i,image in enumerate(keys):
+                self.assertIs(image,frames[i*3][0])
+                box=image.get_bounding_rect(min_alpha=128)
+                y=box.top+int(box.height*(.48 if hero=='wolf' else .65))
+                xs=[x for x in range(box.left,box.right) if image.get_at((x,y)).a>128]
+                roots.append(xs[len(xs)//2]+frames[i*3][1][0])
+            self.assertLess(max(roots)-min(roots),25)
+
     def test_corrupt_preferences_fall_back(self):
         self.path.write_text('[]')
         self.assertEqual(settings.load(self.path),settings.DEFAULTS)

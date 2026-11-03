@@ -12,5 +12,17 @@
     "hit": 24,
     "death": 24
   },
-  "motion_manifest": "assets/v4/manifest.json"
+  "motion_manifest": "assets/v4/manifest.json",
+  "key_pose_counts": {
+    "idle": 3,
+    "walk": 8,
+    "run": 3,
+    "jump": 3,
+    "block": 3,
+    "light": 3,
+    "heavy": 3,
+    "special": 3,
+    "hit": 3,
+    "death": 3
+  }
 }
