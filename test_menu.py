@@ -178,6 +178,34 @@ class MenuTests(unittest.TestCase):
                 roots.append(xs[len(xs)//2]+frames[i*3][1][0])
             self.assertLess(max(roots)-min(roots),25)
 
+    def test_portrait_grid_mouse_selects_real_heroes(self):
+        g=self.g;g.menu.activate('pvp');g.render()
+        self.assertEqual(set(g.menu.roster_portraits),set(HEROES))
+        def click(index):
+            rect=g.menu.buttons('select')[index][1]
+            point=(g.viewport.x+rect.centerx*g.viewport.width/1152,g.viewport.y+rect.centery*g.viewport.height/760)
+            g.handle_event(pg.event.Event(pg.MOUSEBUTTONDOWN,button=1,pos=point))
+        click(1);self.assertEqual(HEROES[g.menu.cursor],'rabbit')
+        click(3);self.assertEqual(g.menu.stage,1)
+        click(0);click(3)
+        self.assertEqual((g.scene,g.p1.hero,g.p2.hero),('battle','rabbit','wolf'))
+        for image in g.menu.roster_portraits.values():
+            self.assertLessEqual(image.get_width(),144)
+            self.assertLessEqual(image.get_height(),150)
+
+    def test_zoom_changes_rendering_but_not_fight_state(self):
+        g=self.g;g.scene='battle';g.phase='fight'
+        before=(g.p1.x,g.p1.y,g.p2.x,g.p2.y,g.p1.hp,g.p2.hp,g.remaining)
+        g.render()
+        self.assertEqual(before,(g.p1.x,g.p1.y,g.p2.x,g.p2.y,g.p1.hp,g.p2.hp,g.remaining))
+        center,ground=g.camera.project(576,523)
+        self.assertAlmostEqual(center,576)
+        self.assertAlmostEqual(ground,523)
+        self.assertLess(g.camera.scale[0],.8)
+        self.assertLess(g.camera.scale[1],.8)
+        _,head=g.camera.project(330,523-367)
+        self.assertLess(ground-head,300)
+
     def test_corrupt_preferences_fall_back(self):
         self.path.write_text('[]')
         self.assertEqual(settings.load(self.path),settings.DEFAULTS)

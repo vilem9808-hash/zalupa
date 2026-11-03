@@ -14,6 +14,7 @@ from impact import draw_impacts
 from menu import Menu, NAMES
 import settings as preferences
 from music import Music
+from camera import BattleCamera
 
 ROOT = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent))
 W, H, GROUND = 1152, 648, 523
@@ -75,6 +76,8 @@ class Game:
         pg.display.set_caption('ВОЛК vs ЗАЯЦ — Galactic Duel')
         self.screen = pg.Surface((W, 760))
         self.arena = pg.Surface((W, H))
+        self.camera=BattleCamera(W,H,GROUND)
+        self.world_layer=pg.Surface(self.camera.world_size,pg.SRCALPHA)
         self.window.fill('#241235')
         splash=pg.font.Font(str(ROOT/'assets/ui.ttf'),32).render('ЗАГРУЗКА АРЕНЫ...',True,'#ffdf59')
         self.window.blit(splash,splash.get_rect(center=self.window.get_rect().center))
@@ -339,7 +342,8 @@ class Game:
         rect = image.get_rect(center=pos) if center else image.get_rect(topleft=pos)
         surface.blit(image,rect)
 
-    def draw_fighter(self, f):
+    def draw_fighter(self,f,target=None,origin=(0,0)):
+        canvas=self.arena if target is None else target
         name=f.hero
         action=action_for(f)
         phase=phase_for(action,f,self.clock,self.phase,self.phase_time,ATTACKS)
@@ -355,9 +359,10 @@ class Game:
         prev=self.previous_positions.get(f.id,(f.x,f.y))
         x=prev[0]+(f.x-prev[0])*self.render_alpha
         y=prev[1]+(f.y-prev[1])*self.render_alpha
+        x+=origin[0];y+=origin[1]
         shadow=pg.Surface((150,28),pg.SRCALPHA)
         pg.draw.ellipse(shadow,(9,3,27,150),(5,4,140,20))
-        self.arena.blit(shadow,(x-75,y-8))
+        canvas.blit(shadow,(x-75,y-8))
         if f.attack:
             opponent=self.p2 if f.id==1 else self.p1
             reach=ATTACKS[f.attack].reach+20
@@ -382,9 +387,9 @@ class Game:
             last,last_offset=state['previous']
             last=last.copy();last.set_alpha(round(255*(1-blend)))
             current=image.copy();current.set_alpha(round(255*blend))
-            self.arena.blit(last,(round(x+last_offset[0]),round(y+last_offset[1])))
-            self.arena.blit(current,rect)
-        else:self.arena.blit(image,rect)
+            canvas.blit(last,(round(x+last_offset[0]),round(y+last_offset[1])))
+            canvas.blit(current,rect)
+        else:canvas.blit(image,rect)
         state['image']=image;state['offset']=offset
 
     def render(self):
@@ -400,11 +405,14 @@ class Game:
                 y = 16+(j*83.37+layer*43)%(380 if layer==2 else 275)
                 v = int(150+75*math.sin(self.clock*(1.1+layer*.3)+j*2.3))
                 pg.draw.circle(a,(v,v,min(255,v+30)),(x,y),max(1,int((layer+1)*.65+(.5+.5*math.sin(j*7.7))*.65)))
+        self.world_layer.fill((0,0,0,0))
         for f in (self.p1,self.p2):
-            self.draw_fighter(f)
+            self.draw_fighter(f,self.world_layer,self.camera.origin)
+        ox,oy=self.camera.origin
         for p in self.particles:
-            pg.draw.circle(a,p[6],(p[0],p[1]),max(1,int(p[5]*p[4]/.48)))
-        draw_impacts(a,self.impacts)
+            pg.draw.circle(self.world_layer,p[6],(p[0]+ox,p[1]+oy),max(1,int(p[5]*p[4]/.48)))
+        draw_impacts(self.world_layer,self.impacts,self.camera.origin)
+        a.blit(pg.transform.smoothscale(self.world_layer,(W,H)),(0,0))
         if self.flash:
             flash = pg.Surface((W,H),pg.SRCALPHA)
             flash.fill((255,255,255,int(self.flash/.11*35)))

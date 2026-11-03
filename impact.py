@@ -3,9 +3,10 @@ import math
 import pygame as pg
 
 
-def draw_impacts(surface, impacts):
+def draw_impacts(surface, impacts, origin=(0,0)):
     for effect in impacts:
         x,y,life,total,guarded,direction,power=effect
+        x+=origin[0];y+=origin[1]
         age=1-life/total
         radius=(14+power*.7)*(1+age*1.5)
         color='#90ddff' if guarded else '#ffc34d'
